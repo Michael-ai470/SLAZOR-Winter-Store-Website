@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Slazor | Winter Wear</title>
+  <meta name="description" content="Puffers, knits and wool coats for the coldest days of the year." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+
+  <main>
+    <section class="hero">
+      <div class="stage">
+        <header class="brand">
+          <p class="brand-kicker">Winter Wear</p>
+          <h1 class="brand-word">Slazor</h1>
+        </header>
+
+        <canvas id="rack" aria-label="A clothes rail of twelve winter garments"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <div id="tooltip" role="status" aria-live="polite"></div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
