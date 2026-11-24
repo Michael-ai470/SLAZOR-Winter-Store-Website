@@ -139,10 +139,13 @@ scene.add(floor);
 // Wordmark painted on the wall, so garments cast shadows over it.
 // Paints straight away (fallback font if needed) and repaints once Anton loads.
 let wordmark = null;
+let wordmarkMetrics = null;     // how the text was laid out on the texture
+let wordmarkOpacityTarget = 0;  // 0 while the intro runs, then 1
 async function paintWordmark() {
   const fontReady = () => document.fonts.check('400 200px Anton');
   await Promise.race([document.fonts.load('400 200px Anton').catch(() => {}), new Promise((r) => setTimeout(r, 1500))]);
   drawWordmark();
+  runIntro().catch((e) => { console.error('intro:', e); wordmarkOpacityTarget = 1; });
   if (!fontReady()) {
     await document.fonts.load('400 200px Anton').catch(() => {});
     if (fontReady()) drawWordmark();
@@ -169,6 +172,7 @@ function drawWordmark() {
   x.fillStyle = color;
   x.textBaseline = 'alphabetic';
   x.fillText(text, pad, pad + asc * scale);
+  wordmarkMetrics = { text, pad, w: c.width, h: c.height, size: 400 * scale, baseline: pad + asc * scale, font: font(400 * scale) };
 
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -185,11 +189,98 @@ function drawWordmark() {
   }
   wordmark = new THREE.Mesh(
     new THREE.PlaneGeometry(width, height),
-    new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 1, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })
+    new THREE.MeshStandardMaterial({ map: tex, transparent: true, opacity: 0, roughness: 1, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })
   );
   wordmark.position.set(0, RAIL_Y - 0.55, WALL_Z + 0.01);
   wordmark.receiveShadow = true;
   scene.add(wordmark);
+}
+
+// Where the wall wordmark currently sits on screen (in CSS pixels).
+function wordmarkScreenRect() {
+  const { width, height } = wordmark.geometry.parameters;
+  const p = wordmark.position;
+  const xs = [];
+  const ys = [];
+  for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+    const v = new THREE.Vector3(p.x + (sx * width) / 2, p.y + (sy * height) / 2, p.z).project(camera);
+    xs.push(((v.x + 1) / 2) * window.innerWidth);
+    ys.push(((1 - v.y) / 2) * window.innerHeight);
+  }
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+}
+
+/* ---------- Entrance: write SLAZOR as hollow outlines, then fly it onto the wall ---------- */
+async function runIntro() {
+  const stage = document.querySelector('.stage');
+  const skip = () => { wordmarkOpacityTarget = 1; stage.classList.remove('intro-running'); };
+  if (reduceMotion || scrollTarget > 0.02 || !wordmarkMetrics) return skip();
+
+  // Make sure the camera has been placed by the render loop.
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+  const m = wordmarkMetrics;
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${m.w} ${m.h}`);
+  svg.setAttribute('aria-hidden', 'true');
+  svg.classList.add('intro-mark');
+
+  // One <text> per letter so they can be written one after another.
+  const measure = document.createElement('canvas').getContext('2d');
+  measure.font = m.font;
+  const letters = [...m.text].map((ch, i) => {
+    const t = document.createElementNS(ns, 'text');
+    t.textContent = ch;
+    t.setAttribute('x', m.pad + measure.measureText(m.text.slice(0, i)).width);
+    t.setAttribute('y', m.baseline);
+    t.setAttribute('font-size', m.size);
+    svg.appendChild(t);
+    return t;
+  });
+  stage.appendChild(svg);
+
+  // Keep the overlay pinned to the wall wordmark while the camera drifts.
+  let alive = true;
+  const place = () => {
+    const r = wordmarkScreenRect();
+    Object.assign(svg.style, { left: `${r.x}px`, top: `${r.y}px`, width: `${r.w}px`, height: `${r.h}px` });
+    return r;
+  };
+  const follow = () => { if (!alive) return; place(); requestAnimationFrame(follow); };
+  const r = place();
+  follow();
+
+  // Start big and centred on screen.
+  const s0 = Math.min((window.innerWidth * 0.88) / r.w, (window.innerHeight * 0.55) / r.h);
+  const dx = window.innerWidth / 2 - (r.x + r.w / 2);
+  const dy = window.innerHeight / 2 - (r.y + r.h / 2);
+  const start = `translate(${dx}px, ${dy}px) scale(${s0})`;
+  svg.style.transform = start;
+
+  // 1) Write each letter's outline.
+  const writes = letters.map((t, i) =>
+    t.animate(
+      [{ strokeDashoffset: 3000 }, { strokeDashoffset: 0 }],
+      { duration: 1100, delay: i * 140, easing: 'cubic-bezier(.6,0,.3,1)', fill: 'both' }
+    ).finished
+  );
+  await Promise.all(writes);
+  await new Promise((res) => setTimeout(res, 250));
+
+  // 2) Fly the hollow word onto the wall.
+  await svg.animate([{ transform: start }, { transform: 'none' }], {
+    duration: 1150, easing: 'cubic-bezier(.7,0,.2,1)', fill: 'forwards',
+  }).finished;
+
+  // 3) Paint fills in underneath, outline fades away.
+  wordmarkOpacityTarget = 1;
+  stage.classList.remove('intro-running');
+  await svg.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 800, easing: 'ease', fill: 'forwards' }).finished;
+  alive = false;
+  svg.remove();
 }
 
 /* ---------- Pipe rack ---------- */
@@ -374,6 +465,8 @@ function frame() {
     it.body.rotation.y = it.rotY;
     it.body.scale.setScalar(GARMENT_SCALE * (1 + 0.05 * it.lift));
   }
+
+  if (wordmark) wordmark.material.opacity = damp(wordmark.material.opacity, wordmarkOpacityTarget, 4, dt);
 
   renderer.render(scene, camera);
   if (first) { canvas.classList.add('ready'); first = false; }

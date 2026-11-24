@@ -93,6 +93,28 @@ body {
   white-space: nowrap;
 }
 
+/* ---------- Entrance animation ---------- */
+.brand-kicker { transition: opacity 0.7s ease, transform 0.7s ease; }
+.stage.intro-running .brand-kicker { opacity: 0; transform: translateY(-8px); }
+
+.intro-mark {
+  position: absolute;
+  z-index: 3;
+  overflow: visible;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+.intro-mark text {
+  font-family: var(--font-display);
+  fill: transparent;            /* hollow letters: the rack shows through */
+  stroke: var(--primary);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-dasharray: 3000;
+  stroke-dashoffset: 3000;
+}
+
 /* ---------- Hover tooltip ---------- */
 #tooltip {
   position: fixed;
